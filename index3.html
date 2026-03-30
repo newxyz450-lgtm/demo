@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FocusFlow | Master Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Covered+By+Your+Grace&display=swap');
+        :root { --teal: #66C5CC; --yellow: #F6CF71; --coral: #F89C74; --bg: #121212; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: var(--bg); color: #f8fafc; overflow: hidden; }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .victory-glow { box-shadow: 0 0 40px rgba(102, 197, 204, 0.3); border-color: var(--teal) !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        
+        /* Diary Specific Styles */
+        .handwritten { font-family: 'Covered By Your Grace', cursive; }
+        .diary-page { background: linear-gradient(90deg, #1e1e1e 0%, #252525 100%); position: relative; }
+        .diary-page::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: rgba(255,255,255,0.05); }
+
+        .switch { position: relative; display: inline-block; width: 30px; height: 16px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 20px; }
+        .slider:before { position: absolute; content: ""; height: 10px; width: 10px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--teal); }
+        input:checked + .slider:before { transform: translateX(14px); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+
+        const App = () => {
+            const [view, setView] = useState('activity'); 
+            const [activeTab, setActiveTab] = useState('todo'); 
+            const [isExpanded, setIsExpanded] = useState(false);
+            const [isChatOpen, setIsChatOpen] = useState(false);
+            const [hideCompleted, setHideCompleted] = useState(false); 
+            const [taskMode, setTaskMode] = useState('task'); 
+
+            // Achievement Diary States
+            const [diaryEntries, setDiaryEntries] = useState([]);
+            const [newEntry, setNewEntry] = useState({ text: "", start: "", end: "", photo: null });
+
+            const [dailyTasks, setDailyTasks] = useState([
+                { id: 1, text: "Morning Planning", done: true, type: 'task', count: 0 },
+                { id: 2, text: "Focus Session", done: false, type: 'strick', count: 5 }
+            ]);
+            
+            const [journeys, setJourneys] = useState([
+                {
+                    id: 100, title: "Initial Project",
+                    tasks: [
+                        { id: 1, text: "Draft Plan", done: true },
+                        { id: 2, text: "Execution", done: false }
+                    ]
+                }
+            ]);
+
+            const [todoInput, setTodoInput] = useState("");
+            const [aiInput, setAiInput] = useState("");
+            const [chatInput, setChatInput] = useState("");
+            const [chatMessages, setChatMessages] = useState([{ type: 'ai', text: "Ready to analyze your growth?" }]);
+
+            const handlePhotoUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => setNewEntry({...newEntry, photo: reader.result});
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const saveAchievement = () => {
+                if(!newEntry.text) return;
+                setDiaryEntries([{...newEntry, id: Date.now()}, ...diaryEntries]);
+                setNewEntry({ text: "", start: "", end: "", photo: null });
+            };
+
+            const stats = useMemo(() => {
+                let total = dailyTasks.length; 
+                let done = dailyTasks.filter(x=>x.done).length;
+                journeys.forEach(j => { total += j.tasks.length; done += j.tasks.filter(x=>x.done).length; });
+                return { 
+                    pct: total > 0 ? Math.round((done/total)*100) : 0, 
+                    done, 
+                    strickCount: dailyTasks.filter(x=>x.type === 'strick').reduce((acc, curr) => acc + curr.count, 0), 
+                    total 
+                };
+            }, [dailyTasks, journeys]);
+
+            useEffect(() => {
+                if (view === 'dashboard') {
+                    const ctx = document.getElementById('progressChart');
+                    if (ctx) {
+                        const chart = new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: ['Routine', 'Journeys', 'Overall'],
+                                datasets: [{
+                                    label: 'Completion %',
+                                    data: [
+                                        dailyTasks.length ? Math.round((dailyTasks.filter(x=>x.done).length/dailyTasks.length)*100) : 0,
+                                        journeys.length ? Math.round((journeys.reduce((acc, j) => acc + (j.tasks.filter(t=>t.done).length/j.tasks.length), 0) / journeys.length) * 100) : 0,
+                                        stats.pct
+                                    ],
+                                    backgroundColor: ['#66C5CC', '#F89C74', '#F6CF71'],
+                                    borderRadius: 12
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { display: false } },
+                                scales: {
+                                    y: { beginAtZero: true, max: 100, grid: { color: '#2a2a2a' }, ticks: { color: '#B3B3B3' } },
+                                    x: { grid: { display: false }, ticks: { color: '#B3B3B3' } }
+                                }
+                            }
+                        });
+                        return () => chart.destroy();
+                    }
+                }
+            }, [view, dailyTasks, journeys, stats]);
+
+            const addDailyItem = () => {
+                if(!todoInput.trim()) return;
+                setDailyTasks([...dailyTasks, { id: Date.now(), text: todoInput, done: false, type: taskMode, count: 0 }]);
+                setTodoInput("");
+            };
+
+            const toggleDailyDone = (id) => {
+                setDailyTasks(dailyTasks.map(t => {
+                    if (t.id === id) {
+                        const isNowDone = !t.done;
+                        return { 
+                            ...t, 
+                            done: isNowDone, 
+                            count: (t.type === 'strick' && isNowDone) ? t.count + 1 : t.count 
+                        };
+                    }
+                    return t;
+                }));
+            };
+
+            const addJourney = () => {
+                if(!aiInput.trim()) return;
+                setJourneys([{ id: Date.now(), title: aiInput, tasks: [{ id: Date.now()+1, text: `Kickoff ${aiInput}`, done: false }] }, ...journeys]);
+                setAiInput("");
+            };
+
+            const toggleAllInJourney = (jId) => {
+                setJourneys(journeys.map(j => {
+                    if (j.id === jId) {
+                        const allDone = j.tasks.every(t => t.done);
+                        return { ...j, tasks: j.tasks.map(t => ({ ...t, done: !allDone })) };
+                    }
+                    return j;
+                }));
+            };
+
+            const NavItem = ({ icon, label, active, onClick, expanded }) => (
+                <div onClick={onClick} className={`flex items-center gap-4 p-4 rounded-2xl cursor-pointer transition-all ${active ? 'bg-[#2a2a2a] text-[#66C5CC]' : 'text-[#B3B3B3] hover:bg-[#222]'}`}>
+                    <span className="text-xl">{icon}</span>
+                    {expanded && <span className="font-bold text-sm tracking-tight">{label}</span>}
+                </div>
+            );
+
+            return (
+                <div className="flex h-screen w-full relative">
+                    <aside className={`h-full bg-[#181818] border-r border-[#2a2a2a] flex flex-col z-50 transition-all duration-300 ${isExpanded ? 'w-64' : 'w-20'}`}>
+                        <div onClick={() => setIsExpanded(!isExpanded)} className="p-6 cursor-pointer flex items-center gap-4 border-b border-[#2a2a2a]">
+                            <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center text-[#121212] font-black" style={{backgroundColor: '#66C5CC'}}>FF</div>
+                            {isExpanded && <span className="font-extrabold text-xl tracking-tighter" style={{color: '#66C5CC'}}>FOCUSFLOW</span>}
+                        </div>
+                        <nav className="flex-1 mt-8 px-3 space-y-2">
+                            <NavItem icon="📋" label="Activity" active={view === 'activity'} onClick={() => setView('activity')} expanded={isExpanded} />
+                            <NavItem icon="📊" label="Dashboard" active={view === 'dashboard'} onClick={() => setView('dashboard')} expanded={isExpanded} />
+                            <NavItem icon="📔" label="Diary" active={view === 'diary'} onClick={() => setView('diary')} expanded={isExpanded} />
+                            <NavItem icon="👤" label="Profile" active={view === 'profile'} onClick={() => setView('profile')} expanded={isExpanded} />
+                            <NavItem icon="❓" label="Help" active={view === 'help'} onClick={() => setView('help')} expanded={isExpanded} />
+                            <NavItem icon="ℹ️" label="About" active={view === 'about'} onClick={() => setView('about')} expanded={isExpanded} />
+                        </nav>
+                    </aside>
+
+                    <main className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+                        {view === 'activity' && (
+                            <div className="max-w-3xl mx-auto fade-in">
+                                <div className="flex flex-col items-center mb-12 gap-4">
+                                    <div className="flex bg-[#1e1e1e] p-1.5 rounded-2xl w-80 border border-[#2a2a2a]">
+                                        <button onClick={() => setActiveTab('todo')} className={`flex-1 py-3 rounded-xl font-bold transition ${activeTab === 'todo' ? 'text-[#121212]' : 'text-[#B3B3B3]'}`} style={{backgroundColor: activeTab === 'todo' ? '#66C5CC' : 'transparent'}}>To-Do List</button>
+                                        <button onClick={() => setActiveTab('event')} className={`flex-1 py-3 rounded-xl font-bold transition ${activeTab === 'event' ? 'text-[#121212]' : 'text-[#B3B3B3]'}`} style={{backgroundColor: activeTab === 'event' ? '#66C5CC' : 'transparent'}}>Event List</button>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[8px] font-black uppercase tracking-widest text-[#B3B3B3]">show</span>
+                                        <label className="switch">
+                                            <input type="checkbox" checked={hideCompleted} onChange={() => setHideCompleted(!hideCompleted)} />
+                                            <span className="slider"></span>
+                                        </label>
+                                        <span className="text-[8px] font-black uppercase tracking-widest text-[#B3B3B3]">hide</span>
+                                    </div>
+                                </div>
+
+                                {activeTab === 'todo' ? (
+                                    <section>
+                                        <div className="text-3xl font-extrabold uppercase tracking-tighter mb-8 text-center"><h2>Daily Routine</h2></div>
+                                        <div className="bg-[#1e1e1e] p-6 rounded-3xl border border-[#2a2a2a] mb-8">
+                                            <div className="flex gap-3 mb-4">
+                                                <input value={todoInput} onChange={(e) => setTodoInput(e.target.value)} className="flex-1 bg-black/20 p-4 rounded-xl outline-none" placeholder="Add task..." />
+                                                <button onClick={addDailyItem} className="px-8 rounded-xl font-bold text-2xl" style={{backgroundColor: '#F89C74', color: '#121212'}}>+</button>
+                                            </div>
+                                            <div className="flex gap-4">
+                                                <button onClick={() => setTaskMode('task')} className={`text-xs font-bold px-5 py-2 rounded-lg ${taskMode === 'task' ? 'bg-[#66C5CC] text-[#121212]' : 'bg-[#2a2a2a]'}`}>Task</button>
+                                                <button onClick={() => setTaskMode('strick')} className={`text-xs font-bold px-5 py-2 rounded-lg ${taskMode === 'strick' ? 'bg-[#F6CF71] text-[#121212]' : 'bg-[#2a2a2a]'}`}>Strick 🔥</button>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {dailyTasks.filter(t => hideCompleted ? !t.done : true).map(t => (
+                                                <div key={t.id} className="flex items-center gap-4 p-5 bg-[#1e1e1e] border border-[#2a2a2a] rounded-2xl group">
+                                                    <div onClick={() => toggleDailyDone(t.id)} className="w-6 h-6 rounded-lg border-2 cursor-pointer flex items-center justify-center" style={{backgroundColor: t.done ? (t.type==='strick'?'#F6CF71':'#66C5CC') : 'transparent', borderColor: t.done ? 'transparent' : '#333'}}>
+                                                        {t.done && <span className="text-[#121212] font-black text-[10px]">✓</span>}
+                                                    </div>
+                                                    <div className="flex-1 flex items-center gap-3">
+                                                        <span className={t.done ? 'line-through opacity-30' : ''}>{t.text}</span>
+                                                        {t.type === 'strick' && <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-[#F6CF71]/20 text-[#F6CF71] uppercase tracking-tighter">Day {t.count}</span>}
+                                                    </div>
+                                                    <button onClick={() => setDailyTasks(dailyTasks.filter(x=>x.id!==t.id))} className="opacity-0 group-hover:opacity-100 text-[#B3B3B3]">✕</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </section>
+                                ) : (
+                                    <section>
+                                        <div className="text-3xl font-extrabold uppercase tracking-tighter mb-8 text-center"><h2>Event Journeys</h2></div>
+                                        <div className="bg-[#1e1e1e] p-6 rounded-3xl border border-dashed border-[#333] mb-10 flex gap-3">
+                                            <input value={aiInput} onChange={(e) => setAiInput(e.target.value)} className="flex-1 bg-transparent p-4 outline-none" placeholder="Add Major Event..." />
+                                            <button onClick={addJourney} className="px-8 rounded-xl font-bold uppercase text-xs" style={{backgroundColor: '#F89C74', color: '#121212'}}>Add Event</button>
+                                        </div>
+                                        <div className="space-y-8">
+                                            {journeys.map(j => {
+                                                const filteredTasks = j.tasks.filter(t => hideCompleted ? !t.done : true);
+                                                const pct = Math.round((j.tasks.filter(t=>t.done).length/j.tasks.length)*100);
+                                                const allDone = j.tasks.every(t => t.done);
+                                                if (hideCompleted && allDone) return null;
+                                                return (
+                                                    <div key={j.id} className={`bg-[#1e1e1e] border border-[#2a2a2a] rounded-[2.5rem] overflow-hidden transition-all ${pct===100?'victory-glow':''}`}>
+                                                        <div className="p-8 flex items-center gap-5 bg-[#252525]">
+                                                            <div onClick={() => toggleAllInJourney(j.id)} className="w-7 h-7 rounded-full border-2 border-[#66C5CC] flex items-center justify-center cursor-pointer hover:bg-[#66C5CC]/20 transition" style={{backgroundColor: allDone ? '#66C5CC' : 'transparent'}}>
+                                                                {allDone && <span className="text-[#121212] font-black text-sm">✓</span>}
+                                                            </div>
+                                                            <h3 className="text-2xl font-black flex-1 uppercase tracking-tighter">{j.title}</h3>
+                                                            <span className="font-mono font-bold text-xl" style={{color: '#F6CF71'}}>{pct}%</span>
+                                                        </div>
+                                                        <div className="w-full h-2 bg-black"><div className="h-full transition-all duration-700" style={{width:`${pct}%`, backgroundColor:'#66C5CC'}}></div></div>
+                                                        <div className="p-8 space-y-4">
+                                                            {filteredTasks.map(t => (
+                                                                <div key={t.id} className="flex items-center gap-4 group">
+                                                                    <div onClick={() => setJourneys(journeys.map(x=>x.id===j.id?{...x,tasks:x.tasks.map(y=>y.id===t.id?{...y,done:!y.done}:y)}:x))} className="w-5 h-5 rounded border-2 cursor-pointer flex items-center justify-center" style={{backgroundColor:t.done?'#66C5CC':'transparent', borderColor: t.done ? 'transparent' : '#333'}}>
+                                                                        {t.done && <span className="text-[#121212] font-black text-[8px]">✓</span>}
+                                                                    </div>
+                                                                    <span className={`text-lg font-semibold flex-1 ${t.done?'line-through opacity-30':''}`}>{t.text}</span>
+                                                                    <button onClick={() => setJourneys(journeys.map(x=>x.id===j.id?{...x,tasks:x.tasks.filter(y=>y.id!==t.id)}:x))} className="opacity-0 group-hover:opacity-100 text-[#B3B3B3] hover:text-[#F89C74]">✕</button>
+                                                                </div>
+                                                            ))}
+                                                            <input onKeyPress={(e)=>{if(e.key==='Enter' && e.target.value.trim()){setJourneys(journeys.map(x=>x.id===j.id?{...x,tasks:[...x.tasks,{id:Date.now(),text:e.target.value,done:false}]}:x)); e.target.value="";}}} className="bg-transparent border-b border-[#333] w-full py-1 text-sm outline-none mt-4" placeholder="Add custom step..." />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </section>
+                                )}
+                            </div>
+                        )}
+
+                        {view === 'dashboard' && (
+                            <div className="max-w-5xl mx-auto fade-in">
+                                <h2 className="text-5xl font-black mb-12 uppercase tracking-tighter">Dashboard</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+                                    <div className="bg-[#1e1e1e] p-8 rounded-[2rem] border border-[#2a2a2a]"><p className="text-xs font-bold uppercase text-[#B3B3B3] mb-2">Focus</p><h4 className="text-5xl font-black text-[#66C5CC]">{stats.pct}%</h4></div>
+                                    <div className="bg-[#1e1e1e] p-8 rounded-[2rem] border border-[#2a2a2a]"><p className="text-xs font-bold uppercase text-[#B3B3B3] mb-2">Done</p><h4 className="text-5xl font-black text-[#F89C74]">{stats.done}</h4></div>
+                                    <div className="bg-[#1e1e1e] p-8 rounded-[2rem] border border-[#2a2a2a]"><p className="text-xs font-bold uppercase text-[#B3B3B3] mb-2">Total</p><h4 className="text-5xl font-black text-white">{stats.total}</h4></div>
+                                    <div className="bg-[#1e1e1e] p-8 rounded-[2rem] border border-[#2a2a2a]"><p className="text-xs font-bold uppercase text-[#B3B3B3] mb-2">Stricks (Days)</p><h4 className="text-5xl font-black text-[#F6CF71]">{stats.strickCount}</h4></div>
+                                </div>
+                                
+                                <div className="bg-[#1e1e1e] p-10 rounded-[3rem] border border-[#2a2a2a] h-80">
+                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-[#B3B3B3] mb-6">Activity Graph</h3>
+                                    <div className="relative h-48 w-full">
+                                        <canvas id="progressChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {view === 'diary' && (
+                            <div className="max-w-5xl mx-auto fade-in">
+                                <div className="flex justify-between items-end mb-12">
+                                    <h2 className="text-5xl font-black uppercase tracking-tighter">Achievement Diary</h2>
+                                    <div className="text-[#66C5CC] font-bold text-sm uppercase tracking-widest">Growth Archive</div>
+                                </div>
+
+                                <div className="bg-[#1e1e1e] p-10 rounded-[3rem] border border-[#2a2a2a] mb-12 flex flex-col md:flex-row gap-10">
+                                    <div className="flex-1 space-y-6">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <p className="text-[10px] font-black uppercase text-[#B3B3B3]">Start Date</p>
+                                                <input type="date" value={newEntry.start} onChange={(e)=>setNewEntry({...newEntry, start: e.target.value})} className="w-full bg-black/20 p-3 rounded-xl border border-[#333] outline-none text-xs text-[#66C5CC]" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-[10px] font-black uppercase text-[#B3B3B3]">End Date</p>
+                                                <input type="date" value={newEntry.end} onChange={(e)=>setNewEntry({...newEntry, end: e.target.value})} className="w-full bg-black/20 p-3 rounded-xl border border-[#333] outline-none text-xs text-[#F89C74]" />
+                                            </div>
+                                        </div>
+                                        <textarea value={newEntry.text} onChange={(e)=>setNewEntry({...newEntry, text: e.target.value})} className="w-full bg-black/20 p-6 rounded-2xl h-32 outline-none handwritten text-2xl text-white resize-none" placeholder="Describe your breakthrough..."></textarea>
+                                        <button onClick={saveAchievement} className="px-8 py-3 rounded-xl font-bold uppercase text-xs" style={{backgroundColor: '#66C5CC', color: '#121212'}}>Commit to History</button>
+                                    </div>
+                                    <div className="w-full md:w-64">
+                                        <label className="w-full h-full border-2 border-dashed border-[#333] rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-[#66C5CC] transition group overflow-hidden bg-black/10">
+                                            {newEntry.photo ? (
+                                                <img src={newEntry.photo} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <>
+                                                    <span className="text-4xl mb-2">📸</span>
+                                                    <span className="text-[10px] font-black uppercase text-[#B3B3B3] group-hover:text-[#66C5CC]">Add Visual Evidence</span>
+                                                </>
+                                            )}
+                                            <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} />
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-[#2a2a2a] border border-[#2a2a2a] rounded-[3rem] overflow-hidden shadow-2xl">
+                                    {diaryEntries.length === 0 ? (
+                                        <div className="col-span-2 p-20 text-center opacity-20"><h4 className="text-3xl font-black uppercase tracking-widest italic">The pages are empty. Start your journey.</h4></div>
+                                    ) : (
+                                        diaryEntries.map((entry, idx) => (
+                                            <div key={entry.id} className={`diary-page p-10 min-h-[400px] flex flex-col ${idx % 2 === 0 ? 'border-r border-[#2a2a2a]' : ''}`}>
+                                                <div className="flex justify-between items-start mb-6">
+                                                    <div className="bg-[#121212] px-4 py-1 rounded-full border border-[#333] flex items-center gap-3">
+                                                        <span className="text-[10px] font-bold text-[#66C5CC]">{entry.start || '---'}</span>
+                                                        <span className="text-[8px] text-[#B3B3B3]">TO</span>
+                                                        <span className="text-[10px] font-bold text-[#F89C74]">{entry.end || '---'}</span>
+                                                    </div>
+                                                    <span className="font-mono text-[10px] text-[#333]">#00{diaryEntries.length - idx}</span>
+                                                </div>
+                                                <p className="handwritten text-3xl leading-relaxed text-[#f8fafc] flex-1 mb-6">"{entry.text}"</p>
+                                                {entry.photo && (
+                                                    <div className="w-full h-48 rounded-2xl overflow-hidden grayscale hover:grayscale-0 transition duration-500 border border-[#333]">
+                                                        <img src={entry.photo} className="w-full h-full object-cover" />
+                                                    </div>
+                                                )}
+                                                <div className="mt-6 pt-6 border-t border-white/5 flex justify-between items-center">
+                                                    <div className="flex gap-1">
+                                                        <div className="w-2 h-2 rounded-full bg-[#66C5CC]"></div>
+                                                        <div className="w-2 h-2 rounded-full bg-[#F6CF71]"></div>
+                                                        <div className="w-2 h-2 rounded-full bg-[#F89C74]"></div>
+                                                    </div>
+                                                    <span className="text-[8px] font-black uppercase tracking-widest text-[#333]">Verified Growth</span>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {view === 'profile' && (
+                             <div className="max-w-4xl mx-auto fade-in">
+                                <h2 className="text-5xl font-black mb-12 uppercase">Profile</h2>
+                                <div className="bg-[#1e1e1e] p-12 rounded-[3rem] border border-[#2a2a2a] flex flex-col md:flex-row gap-12 items-center">
+                                    <div className="w-40 h-40 bg-[#F6CF71] rounded-[2.5rem] flex items-center justify-center text-6xl font-black text-[#121212]">U</div>
+                                    <div className="flex-1 text-center md:text-left">
+                                        <h3 className="text-4xl font-black mb-2">FocusFlow User</h3>
+                                        <div className="grid grid-cols-2 gap-4 mt-6">
+                                            <div className="p-4 bg-black/20 rounded-xl border border-[#333]"><p className="text-[10px] font-black text-[#B3B3B3] uppercase">Rank</p><p className="text-lg font-bold text-[#66C5CC]">Gold II</p></div>
+                                            <div className="p-4 bg-black/20 rounded-xl border border-[#333]"><p className="text-[10px] font-black text-[#B3B3B3] uppercase">Consistency</p><p className="text-lg font-bold text-[#F89C74]">Ultra</p></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {view === 'help' && (
+                            <div className="max-w-3xl mx-auto fade-in py-10">
+                                <h2 className="text-5xl font-black mb-12 uppercase text-center" style={{color: '#66C5CC'}}>Help</h2>
+                                <div className="space-y-4">
+                                    {['What is a Strick?', 'How to use Master Toggle?'].map((q, i) => (
+                                        <div key={i} className="bg-[#1e1e1e] p-6 rounded-2xl border border-[#2a2a2a] font-bold text-lg hover:border-[#66C5CC] transition cursor-pointer">{q}</div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        
+                        {view === 'about' && (
+                            <div className="max-w-2xl mx-auto fade-in py-20 text-center">
+                                <h2 className="text-6xl font-black mb-8 uppercase" style={{color: '#66C5CC'}}>FocusFlow</h2>
+                                <p className="bg-[#1e1e1e] p-10 rounded-[3rem] border border-[#2a2a2a]">Quantified dimensional growth system.</p>
+                            </div>
+                        )}
+                    </main>
+
+                    <div className="fixed bottom-8 right-8 z-[100] flex flex-col items-end">
+                        {isChatOpen && (
+                            <div className="mb-4 w-80 h-[400px] bg-[#1e1e1e] border border-[#2a2a2a] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden fade-in">
+                                <div className="p-5 flex items-center justify-between bg-[#222]">
+                                    <span className="font-black text-[10px] uppercase text-[#66C5CC]">Predictor AI</span>
+                                    <button onClick={() => setIsChatOpen(false)} className="text-[#B3B3B3] hover:text-white">✕</button>
+                                </div>
+                                <div className="flex-1 p-5 overflow-y-auto space-y-4 custom-scrollbar">
+                                    {chatMessages.map((m, i) => (
+                                        <div key={i} className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`p-4 rounded-2xl text-xs font-semibold ${m.type === 'user' ? 'bg-[#66C5CC] text-[#121212]' : 'bg-[#2a2a2a]'}`}>{m.text}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="p-4 border-t border-[#2a2a2a]">
+                                    <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyPress={(e) => { 
+                                        if(e.key === 'Enter' && chatInput.trim()){ 
+                                            const newMsg = [...chatMessages, {type: 'user', text: chatInput}]; 
+                                            setChatMessages(newMsg);
+                                            setChatInput("");
+                                        }
+                                    }} className="w-full bg-black/20 p-4 rounded-xl outline-none text-xs" placeholder="Ask AI..." />
+                                </div>
+                            </div>
+                        )}
+                        <button onClick={() => setIsChatOpen(!isChatOpen)} className="w-16 h-16 rounded-full bg-[#66C5CC] shadow-2xl flex items-center justify-center text-3xl hover:scale-110 transition active:scale-95">🤖</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
